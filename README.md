@@ -1,41 +1,41 @@
 # Multi-Agent RAG System
 
-## 1. Visão Geral da Arquitetura
+## 1. Architecture Overview
 
-Este projeto implementa um sistema multi-agentes orquestrado para responder a consultas de usuários de forma inteligente e segura. A arquitetura é projetada para decidir dinamicamente a melhor estratégia de resposta (Direta ou RAG - Retrieval-Augmented Generation) após passar por uma camada de verificação de conformidade.
+This project implements an orchestrated multi-agent system to answer user queries intelligently and securely. The architecture is designed to dynamically decide the best response strategy (Direct or RAG - Retrieval-Augmented Generation) after passing through a compliance verification layer.
 
-### Componentes Principais
+### Key Components
 
-* **Orchestrator**: O núcleo do sistema. Gerencia o ciclo de vida da requisição, instanciando agentes e controlando o fluxo de dados entre eles.
-* **Compliance Agent**: A primeira linha de defesa. Analisa a consulta do usuário em busca de injeção de prompt, conteúdo malicioso ou violações de políticas. Tópicos bloqueados incluem: Violência, Atos Ilegais, Conteúdo Sexual, Política, Religião, Integridade Corporativa (Demissões), Drogas e PII. Se a consulta for rejeitada, o fluxo é interrompido imediatamente.
-* **Decision Agent**: O "cérebro" estratégico. Avalia consultas seguras para determinar se o sistema deve responder diretamente (para perguntas gerais/conversa) ou usar RAG (para perguntas que exigem contexto específico do conhecimento ingerido).
-* **Direct Answer Agent**: Especializado em respostas diretas e conversacionais que não requerem busca em banco de dados vetorial.
-* **RAG Retrieval**: Módulo responsável por buscar documentos relevantes no banco vetorial **Qdrant** utilizando embeddings **HuggingFace** (`all-MiniLM-L6-v2`).
-* **RAG Answer Agent**: Sintetiza uma resposta final utilizando o contexto recuperado pelo módulo de Retrieval, garantindo que a resposta seja fundamentada nos dados.
-* **API Layer**: Interface RESTful construída com **FastAPI** para integração externa.
+* **Orchestrator**: The core of the system. Manages the request lifecycle, instantiating agents and controlling the data flow between them.
+* **Compliance Agent**: The first line of defense. Analyzes the user query for prompt injection, malicious content, or policy violations. Blocked topics include: Violence, Illegal Acts, Sexual Content, Politics, Religion, Corporate Integrity (Layoffs), Drugs, and PII. If the query is rejected, the flow is stopped immediately.
+* **Decision Agent**: The strategic "brain". Evaluates safe queries to determine if the system should answer directly (for general questions/conversation) or use RAG (for questions requiring specific context from ingested knowledge).
+* **Direct Answer Agent**: Specialized in direct and conversational responses that do not require searching a vector database.
+* **RAG Retrieval**: Module responsible for fetching relevant documents from the **Qdrant** vector database using **HuggingFace** embeddings (`all-MiniLM-L6-v2`).
+* **RAG Answer Agent**: Synthesizes a final answer using the context retrieved by the Retrieval module, ensuring the response is grounded in the data.
+* **API Layer**: RESTful interface built with **FastAPI** for external integration.
 
 ---
 
-## 2. Diagrama de Fluxo (Mermaid)
+## 2. Flow Diagram (Mermaid)
 
 ```mermaid
 graph TD
-    User([Usuário]) -->|Envia Consulta| Orchestrator[Orchestrator]
+    User([User]) -->|Sends Query| Orchestrator[Orchestrator]
     
-    subgraph "Camada de Segurança"
+    subgraph "Security Layer"
         Orchestrator --> Compliance{Compliance Agent}
-        Compliance -->|Bloqueado| BlockedEnd([Fim: Resposta de Bloqueio])
+        Compliance -->|Blocked| BlockedEnd([End: Block Response])
     end
     
-    subgraph "Camada de Decisão"
-        Compliance -->|Aprovado| Decision{Decision Agent}
-        Decision -->|Estratégia: Direct| DirectAgent[Direct Answer Agent]
-        Decision -->|Estratégia: RAG| RAGRetrieval[RAG Retrieval<br/>(Qdrant + HF Embeddings)]
+    subgraph "Decision Layer"
+        Compliance -->|Approved| Decision{Decision Agent}
+        Decision -->|Strategy: Direct| DirectAgent[Direct Answer Agent]
+        Decision -->|Strategy: RAG| RAGRetrieval[RAG Retrieval<br/>(Qdrant + HF Embeddings)]
     end
     
-    subgraph "Camada de Execução"
-        DirectAgent --> Result([Resposta Final])
-        RAGRetrieval -->|Contexto| RAGAgent[RAG Answer Agent]
+    subgraph "Execution Layer"
+        DirectAgent --> Result([Final Response])
+        RAGRetrieval -->|Context| RAGAgent[RAG Answer Agent]
         RAGAgent --> Result
     end
 
@@ -46,33 +46,38 @@ graph TD
 
 ---
 
-## 3. Explicação do Fluxo
+## 3. Flow Explanation
 
-1. **Entrada**: O usuário envia uma consulta (query) e opcionalmente um papel (role).
-2. **Verificação de Compliance**:
-    * O `ComplianceAgent` analisa a entrada.
-    * **Se inseguro**: Retorna um status de bloqueio com a razão (ex: *Prompt Injection*). O Orchestrator retorna imediatamente.
-    * **Se seguro**: O fluxo continua, possivelmente com uma versão "sanitizada" da query.
-3. **Decisão de Estratégia**:
-    * O `DecisionAgent` analisa a complexidade e a necessidade de conhecimento externo.
-    * **Direct**: Para saudações, perguntas de conhecimento geral ou lógica simples.
-    * **RAG**: Para perguntas sobre processos específicos, documentação interna ou dados que requerem fact-checking.
-4. **Execução**:
-    * **Via Direct**: O `DirectAnswerAgent` gera a resposta usando apenas o conhecimento do LLM.
-    * **Via RAG**: O sistema busca os top-chkunks relevantes no Qdrant, concatena o contexto e o envia junto com a pergunta para o `RAGAnswerAgent` gerar a resposta fundamentada.
-5. **Saída**: Um objeto JSON padronizado contendo o status, a resposta, a estratégia utilizada e metadados (como tempo ou razões de decisão).
+1. **Input**: The user sends a query and optionally a role.
+2. **Compliance Verification**:
+    * The `ComplianceAgent` analyzes the input.
+    * **If unsafe**: Returns a block status with the reason (e.g., *Prompt Injection*). The Orchestrator returns immediately.
+    * **If safe**: The flow continues, possibly with a "sanitized" version of the query.
+3. **Strategy Decision**:
+    * The `DecisionAgent` analyzes the complexity and need for external knowledge.
+    * **Direct**: For greetings, general knowledge questions, or simple logic.
+    * **RAG**: For questions about specific processes, internal documentation, or data requiring fact-checking.
+4. **Execution**:
+    * **Via Direct**: The `DirectAnswerAgent` generates the response using only the LLM's knowledge.
+    * **Via RAG**: The system fetches the top relevant chunks in Qdrant, concatenates the context, and sends it along with the question to the `RAGAnswerAgent` to generate the grounded response.
+5. **Output**: A standardized JSON object containing the status, response, strategy used, and metadata (such as time or decision reasons).
 
 ---
 
-## 4. Instruções de Execução
+## 4. Execution Instructions
 
-### Pré-requisitos
+### Prerequisites
 
 * Python 3.10+
-* Chave de API da OpenAI definida no ambiente (`OPENAI_API_KEY`).
-* NLTK Data (baixado automaticamente na primeira execução: `punkt_tab`, `averaged_perceptron_tagger`).
+* **Environment Configuration**: Create a `.env` file in the root directory (copy from `.env.example`) and add your OpenAI API Key:
 
-### Instalação
+  ```env
+  OPENAI_API_KEY=your_api_key_here
+  ```
+
+* NLTK Data (downloaded automatically on first run: `punkt_tab`, `averaged_perceptron_tagger`).
+
+### Installation
 
 ```bash
 pip install -r requirements.txt
@@ -120,27 +125,27 @@ The API will be available at `http://localhost:8000`.
 
 ---
 
-## 5. Trade-offs e Decisões Técnicas
+## 5. Trade-offs and Technical Decisions
 
-* **Arquitetura Baseada em Agentes vs. Chain Simples**:
-  * *Decisão*: Optou-se por agentes especializados (Classes separadas) em vez de uma única "chain" longa.
-  * *Trade-off*: Aumenta ligeiramente a complexidade do código e a latência (múltiplas chamadas de LLM), mas ganha-se imensamente em **modularidade**, **testabilidade** e **capacidade de depuração**. Cada agente pode ser otimizado ou substituído independentemente.
+* **Agent-Based Architecture vs. Simple Chain**:
+  * *Decision*: Opted for specialized agents (Separate Classes) instead of a single long "chain".
+  * *Trade-off*: Slightly increases code complexity and latency (multiple LLM calls), but gains immensely in **modularity**, **testability**, and **debuggability**. Each agent can be optimized or replaced independently.
 
-* **Embeddings HuggingFace (all-MiniLM-L6-v2)**:
-  * *Decisão*: Modelo open-source leve e eficiente.
-  * *Trade-off*: Menor custo (zero API cost para embeddings) e rapidez. Pode ter menor precisão semântica que modelos maiores (ex: OpenAI text-embedding-3-large) em domínios muito complexos, mas é excelente para propósitos gerais.
+* **HuggingFace Embeddings (all-MiniLM-L6-v2)**:
+  * *Decision*: Lightweight and efficient open-source model.
+  * *Trade-off*: Lower cost (zero API cost for embeddings) and speed. May have lower semantic precision than larger models (e.g., OpenAI text-embedding-3-large) in very complex domains, but is excellent for general purposes.
 
-* **Camada de Compliance Explícita**:
-  * *Decisão*: Separar a segurança da lógica de negócio.
-  * *Trade-off*: Adiciona um "hop" extra em todas as requisições. Porém, garante que nenhuma lógica de negócio (ou recuperação de banco de dados) ocorra com inputs maliciosos, protegendo a infraestrutura.
+* **Explicit Compliance Layer**:
+  * *Decision*: Separate security from business logic.
+  * *Trade-off*: Adds an extra "hop" in all requests. However, ensures that no business logic (or database retrieval) occurs with malicious inputs, protecting the infrastructure.
 
-* **Logging Centralizado vs Print**:
-  * *Decisão*: Uso de um logger configurado globalmente em vez de `print`.
-  * *Trade-off*: Permite melhor rastreabilidade, controle de níveis de log (INFO, ERROR) e formatação consistente, essencial para monitoramento em produção.
+* **Centralized Logging vs Print**:
+  * *Decision*: Use of a globally configured logger instead of `print`.
+  * *Trade-off*: Allows better traceability, log level control (INFO, ERROR), and consistent formatting, essential for production monitoring.
 
 ---
 
-## 6. Exemplos de Perguntas e Respostas
+## 6. Example Questions and Answers
 
 1. **What is William Bassalobre’s professional background?**
 
