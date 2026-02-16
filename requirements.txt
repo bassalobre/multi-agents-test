@@ -1,0 +1,15 @@
+langchain
+langchain-core
+langchain-community
+langchain-openai
+qdrant-client
+pydantic
+python-dotenv
+langchain-qdrant
+langchain-huggingface
+sentence-transformers
+pypdf
+markdown
+fastapi
+uvicorn
+nltk
